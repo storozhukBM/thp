@@ -2,7 +2,6 @@ package thp
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 )
 
@@ -42,6 +41,9 @@ type Producer[T any] struct {
 }
 
 func (p *Producer[T]) Flush() {
+    if len(p.batch) == 0 {
+        return
+    }
 	// TODO: write documentation on how to avoid items dropping
 	// in case of ctx cancelation using detached context
 	select {
@@ -50,7 +52,6 @@ func (p *Producer[T]) Flush() {
 		// we can't block this goroutine anymore
 		// and will drop batched items
 	}
-	fmt.Printf("batch flushed\n")
 
 	p.batch = make([]T, 0, p.parent.batchSize)
 }

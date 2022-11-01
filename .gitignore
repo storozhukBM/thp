@@ -1,2 +1,3 @@
 .fleet
 *.out
+*_stat*

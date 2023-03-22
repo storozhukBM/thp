@@ -5,6 +5,8 @@ import (
 	"runtime"
 )
 
+const ChanBatchSizeError chanError = "Batch size for thp.Chan can't be lower than 1"
+
 type Chan[T any] struct {
 	batchSize    int
 	internalChan chan []T
@@ -12,7 +14,7 @@ type Chan[T any] struct {
 
 func NewChan[T any](batchSize int) (*Chan[T], func()) {
 	if batchSize < 1 {
-		panic("Batch size for thp.Chan can't be lower than 1")
+		panic(ChanBatchSizeError)
 	}
 	ch := &Chan[T]{
 		batchSize:    batchSize,
@@ -41,9 +43,9 @@ type Producer[T any] struct {
 }
 
 func (p *Producer[T]) Flush() {
-    if len(p.batch) == 0 {
-        return
-    }
+	if len(p.batch) == 0 {
+		return
+	}
 	// TODO: write documentation on how to avoid items dropping
 	// in case of ctx cancelation using detached context
 	select {
@@ -109,4 +111,10 @@ func (c *Consumer[T]) NonBlockingPoll() (T, bool) {
 
 func zero[T any]() T {
 	return *new(T)
+}
+
+type chanError string
+
+func (m chanError) Error() string {
+	return string(m)
 }

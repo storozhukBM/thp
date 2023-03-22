@@ -3,19 +3,20 @@ package thp_test
 import (
 	"context"
 	"fmt"
-	"github.com/storozhukBM/thp"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/storozhukBM/thp"
 )
 
 func BenchmarkChanThroughput(b *testing.B) {
-    for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
-        b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "standard", 8, 8, bufSize), func(b *testing.B) {
-            runStandardChan(b, 8, 8, bufSize)
-        })
-    }
-    for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
+	for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
+		b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "standard", 8, 8, bufSize), func(b *testing.B) {
+			runStandardChan(b, 8, 8, bufSize)
+		})
+	}
+	for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
 		b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "thp", 8, 8, bufSize), func(b *testing.B) {
 			runThpChan(b, 8, 8, bufSize)
 		})
@@ -36,7 +37,7 @@ func runStandardChan(b *testing.B, producersCnt int, consumersCnt int, bufferSiz
 			defer producersWg.Done()
 			canRun.Wait()
 			for j := 0; j < itemsPerProducer; j++ {
-                ch <- 1
+				ch <- 1
 			}
 		}()
 	}
@@ -49,7 +50,7 @@ func runStandardChan(b *testing.B, producersCnt int, consumersCnt int, bufferSiz
 			defer consumersWg.Done()
 			result := 0
 			canRun.Wait()
-            for item := range ch {
+			for item := range ch {
 				result += item
 			}
 			counter.Add(int64(result))
@@ -57,10 +58,11 @@ func runStandardChan(b *testing.B, producersCnt int, consumersCnt int, bufferSiz
 	}
 
 	b.ResetTimer()
+	b.ReportAllocs()
 	canRun.Done()
 
 	producersWg.Wait()
-    close(ch)
+	close(ch)
 	consumersWg.Wait()
 	b.StopTimer()
 
@@ -109,6 +111,7 @@ func runThpChan(b *testing.B, producersCnt int, consumersCnt int, bufferSize int
 	}
 
 	b.ResetTimer()
+	b.ReportAllocs()
 	canRun.Done()
 
 	producersWg.Wait()

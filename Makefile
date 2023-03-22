@@ -3,30 +3,38 @@ benchart := go run github.com/storozhukBM/benchart@v1.0.0
 golangci := go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
 gofumpt := go run mvdan.cc/gofumpt@v0.4.0
 
-coverage: test
-	go tool cover -html=coverage.out
+BOLD = \033[1m
+CLEAR = \033[0m
+CYAN = \033[36m
 
-test: clean format
-	go test -race -coverprofile coverage.out ./...
+help: ## Display this help
+	@awk '\
+		BEGIN {FS = ":.*##"; printf "Usage: make $(CYAN)<target>$(CLEAR)\n"} \
+		/^[a-z0-9]+([\/]%)?([\/](%-)?[a-z\-0-9%]+)*:.*? ##/ { printf "  $(CYAN)%-15s$(CLEAR) %s\n", $$1, $$2 } \
+		/^##@/ { printf "\n$(BOLD)%s$(CLEAR)\n", substr($$0, 5) }' \
+		$(MAKEFILE_LIST)
 
-bench:
-	go test -timeout 3h -count=5 -run=xxx -bench=BenchmarkChanThroughput ./... | tee chan_stat.txt
-	$(benchstat) chan_stat.txt
-	$(benchstat) -csv chan_stat.txt > chan_stat.csv
-	$(benchart) 'ChanThroughput;xAxisType=log' chan_stat.csv chan_stat.html
-	open chan_stat.html
-
-lint: clean
-	$(golangci) run .
-
-clean:
+clean: ## Clean intermediate coverate, profiler and benchmark result files
 	@go clean
 	@rm -f profile.out
 	@rm -f coverage.out
 	@rm -f result.html
 
-format:
+format: ## Run formatting
 	$(gofumpt) -l -w .
 
-help:
-	@awk '$$1 ~ /^.*:/ {print substr($$1, 0, length($$1)-1)}' Makefile
+lint: clean ## Run linters
+	$(golangci) run .
+
+test: clean format ## Run tests
+	go test -race -coverprofile coverage.out ./...
+
+coverage: test ## Measure and show coverage profile
+	go tool cover -html=coverage.out
+
+bench: ## Run benchmarks and show benchart
+	go test -timeout 3h -count=5 -run=xxx -bench=BenchmarkChanThroughput ./... | tee chan_stat.txt
+	$(benchstat) chan_stat.txt
+	$(benchstat) -csv chan_stat.txt > chan_stat.csv
+	$(benchart) 'ChanThroughput;xAxisType=log' chan_stat.csv chan_stat.html
+	open chan_stat.html

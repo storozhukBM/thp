@@ -102,8 +102,7 @@ func runThpChan(b *testing.B, producersCnt int, consumersCnt int, bufferSize int
 			consumer := ch.Consumer(context.Background())
 			result := 0
 			canRun.Wait()
-			item, ok := consumer.Poll()
-			for ; ok; item, ok = consumer.Poll() {
+			for item, ok := consumer.Poll(); ok; item, ok = consumer.Poll() {
 				result += item
 			}
 			counter.Add(int64(result))

@@ -84,6 +84,7 @@ func (ch *Chan[T]) Consumer(ctx context.Context) *Consumer[T] {
 
 func (c *Consumer[T]) prefetch() bool {
 	c.idx = 0
+	c.batch = nil
 	select {
 	case batch, ok := <-c.parent.internalChan:
 		c.batch = batch
@@ -97,7 +98,7 @@ func (c *Consumer[T]) Poll() (value T, chAndCtxOpen bool) {
 	if c.idx >= len(c.batch) {
 		ok := c.prefetch()
 		if !ok {
-			return zero[T](), ok
+			return zero[T](), false
 		}
 	}
 	item := c.batch[c.idx]

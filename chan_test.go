@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -21,6 +22,38 @@ func TestNewChan(t *testing.T) {
 	_, _ = thp.NewChan[*int](1)
 }
 
+func TestPerefetch(t *testing.T) {
+	ch, chCloser := thp.NewChan[int](3)
+	defer chCloser()
+
+	producer, flush := ch.Producer(context.Background())
+	go func() {
+		defer flush()
+		for i := 0; i < 3; i++ {
+			producer.Put(1)
+		}
+	}()
+
+	res := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	consumer := ch.Consumer(ctx)
+	for i := 0; i < 3; i++ {
+		value, ok := consumer.Poll()
+		eq(t, true, ok)
+		res += value
+	}
+	eq(t, 3, res)
+
+	cancel()
+	value, ok := consumer.Poll()
+	eq(t, false, ok)
+	eq(t, 0, value)
+
+	oneMoreValue, ok := consumer.Poll()
+	eq(t, false, ok)
+	eq(t, 0, oneMoreValue)
+}
+
 func TestChan(t *testing.T) {
 	t.Parallel()
 
@@ -32,12 +65,23 @@ func TestChan(t *testing.T) {
 		for _, c := range poolSizes {
 			for _, batchSize := range batchSizes {
 				for _, itemsPerProducer := range itemsPerProducers {
-					t.Run(fmt.Sprintf("primitive;p:%v;c:%v;bSz:%v;iPP:%v", p, c, batchSize, itemsPerProducer), func(t *testing.T) {
-						runPrimitiveChanTest(t, batchSize, p, c, itemsPerProducer)
-					})
-					t.Run(fmt.Sprintf("obj;p:%v;c:%v;bSz:%v;iPP:%v", p, c, batchSize, itemsPerProducer), func(t *testing.T) {
-						runObjChanTest(t, batchSize, p, c, itemsPerProducer)
-					})
+					t.Run(
+						fmt.Sprintf(
+							"primitive;p:%v;c:%v;bSz:%v;iPP:%v",
+							p, c, batchSize, itemsPerProducer,
+						), func(t *testing.T) {
+							runPrimitiveChanTest(t, batchSize, p, c, itemsPerProducer)
+						},
+					)
+					t.Run(
+						fmt.Sprintf(
+							"obj;p:%v;c:%v;bSz:%v;iPP:%v",
+							p, c, batchSize, itemsPerProducer,
+						),
+						func(t *testing.T) {
+							runObjChanTest(t, batchSize, p, c, itemsPerProducer)
+						},
+					)
 				}
 			}
 		}
@@ -154,4 +198,11 @@ func expectPanic(t *testing.T, f func(), expectedError error) string {
 		t.Fatal("panic isn't detected")
 	}
 	return actualPanic.(error).Error()
+}
+
+func eq[V any](t *testing.T, expected V, actual V) {
+	t.Helper()
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("\nexp: %T:`%#v`\nact: %T:`%#v`", expected, expected, actual, actual)
+	}
 }

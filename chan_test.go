@@ -15,10 +15,10 @@ import (
 func TestNewChan(t *testing.T) {
 	expectPanic(t, func() {
 		thp.NewChan[*int](-1)
-	}, thp.ChanBatchSizeError)
+	}, thp.ErrChanBatchSize)
 	expectPanic(t, func() {
 		thp.NewChan[*int](0)
-	}, thp.ChanBatchSizeError)
+	}, thp.ErrChanBatchSize)
 	_, _ = thp.NewChan[*int](1)
 }
 
@@ -65,21 +65,24 @@ func TestChan(t *testing.T) {
 		for _, c := range poolSizes {
 			for _, batchSize := range batchSizes {
 				for _, itemsPerProducer := range itemsPerProducers {
+					iPP := itemsPerProducer
 					t.Run(
 						fmt.Sprintf(
 							"primitive;p:%v;c:%v;bSz:%v;iPP:%v",
-							p, c, batchSize, itemsPerProducer,
+							p, c, batchSize, iPP,
 						), func(t *testing.T) {
-							runPrimitiveChanTest(t, batchSize, p, c, itemsPerProducer)
+							t.Parallel()
+							runPrimitiveChanTest(t, batchSize, p, c, iPP)
 						},
 					)
 					t.Run(
 						fmt.Sprintf(
 							"obj;p:%v;c:%v;bSz:%v;iPP:%v",
-							p, c, batchSize, itemsPerProducer,
+							p, c, batchSize, iPP,
 						),
 						func(t *testing.T) {
-							runObjChanTest(t, batchSize, p, c, itemsPerProducer)
+							t.Parallel()
+							runObjChanTest(t, batchSize, p, c, iPP)
 						},
 					)
 				}
@@ -88,6 +91,7 @@ func TestChan(t *testing.T) {
 	}
 }
 
+//nolint:thelper // This is not exactly helper and in case of error we want to know line
 func runPrimitiveChanTest(t *testing.T, batchSize int, producersCnt int, consumersCnt int, itemsPerProducer int) {
 	ch, chCloser := thp.NewChan[int](batchSize)
 	producersWg := &sync.WaitGroup{}
@@ -129,6 +133,7 @@ func runPrimitiveChanTest(t *testing.T, batchSize int, producersCnt int, consume
 	}
 }
 
+//nolint:thelper // This is not exactly helper and in case of error we want to know line
 func runObjChanTest(t *testing.T, batchSize int, producersCnt int, consumersCnt int, itemsPerProducer int) {
 	ch, chCloser := thp.NewChan[*int](batchSize)
 	producersWg := &sync.WaitGroup{}
@@ -171,12 +176,16 @@ func runObjChanTest(t *testing.T, batchSize int, producersCnt int, consumersCnt 
 	}
 }
 
-func expectPanic(t *testing.T, f func(), expectedError error) string {
+func expectPanic(t *testing.T, f func(), expectedError error) {
 	t.Helper()
-	var actualPanic interface{}
+	var caughtPanic error
 	func() {
 		defer func() {
-			actualPanic = recover()
+			actualPanic, ok := recover().(error)
+			if !ok {
+				t.Fatal("recovered panic is not error")
+			}
+			caughtPanic = actualPanic
 			if expectedError != nil {
 				if actualPanic == nil {
 					t.Fatalf(
@@ -184,7 +193,7 @@ func expectPanic(t *testing.T, f func(), expectedError error) string {
 						expectedError, expectedError,
 					)
 				}
-				if !errors.Is(actualPanic.(error), expectedError) {
+				if !errors.Is(actualPanic, expectedError) {
 					t.Fatalf(
 						"unexpected error type. expected %T(%v); actual: %T(%v)",
 						expectedError, expectedError, actualPanic, actualPanic,
@@ -194,10 +203,9 @@ func expectPanic(t *testing.T, f func(), expectedError error) string {
 		}()
 		f()
 	}()
-	if actualPanic == nil {
+	if caughtPanic == nil {
 		t.Fatal("panic isn't detected")
 	}
-	return actualPanic.(error).Error()
 }
 
 func eq[V any](t *testing.T, expected V, actual V) {

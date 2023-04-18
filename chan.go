@@ -5,7 +5,7 @@ import (
 	"runtime"
 )
 
-const ChanBatchSizeError chanError = "Batch size for thp.Chan can't be lower than 1"
+const ErrChanBatchSize chanError = "Batch size for thp.Chan can't be lower than 1"
 
 type Chan[T any] struct {
 	batchSize    int
@@ -14,12 +14,14 @@ type Chan[T any] struct {
 
 func NewChan[T any](batchSize int) (*Chan[T], func()) {
 	if batchSize < 1 {
-		panic(ChanBatchSizeError)
+		panic(ErrChanBatchSize)
 	}
+
 	ch := &Chan[T]{
 		batchSize:    batchSize,
-		internalChan: make(chan []T, 2*runtime.NumCPU()),
+		internalChan: make(chan []T, runtime.NumCPU()),
 	}
+
 	return ch, ch.Close
 }
 
@@ -33,6 +35,7 @@ func (ch *Chan[T]) Producer(ctx context.Context) (*Producer[T], func()) {
 		ctx:    ctx,
 		batch:  make([]T, 0, ch.batchSize),
 	}
+
 	return result, result.Flush
 }
 
@@ -94,7 +97,7 @@ func (c *Consumer[T]) prefetch() bool {
 	}
 }
 
-func (c *Consumer[T]) Poll() (value T, chAndCtxOpen bool) {
+func (c *Consumer[T]) Poll() (T, bool) {
 	if c.idx >= len(c.batch) {
 		ok := c.prefetch()
 		if !ok {

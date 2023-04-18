@@ -1,6 +1,6 @@
 benchstat := go run golang.org/x/perf/cmd/benchstat@v0.0.0-20220920022801-e8d778a60d07
 benchart := go run github.com/storozhukBM/benchart@v1.0.0
-golangci := go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.1
+golangci := go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
 gofumpt := go run mvdan.cc/gofumpt@v0.4.0
 
 BOLD = \033[1m

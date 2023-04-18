@@ -23,6 +23,7 @@ func BenchmarkChanThroughput(b *testing.B) {
 	}
 }
 
+//nolint:thelper // This is not exactly helper and in case of error we want to know line
 func runStandardChan(b *testing.B, producersCnt int, consumersCnt int, bufferSize int) {
 	canRun := &sync.WaitGroup{}
 	canRun.Add(1)
@@ -72,6 +73,7 @@ func runStandardChan(b *testing.B, producersCnt int, consumersCnt int, bufferSiz
 	}
 }
 
+//nolint:thelper // This is not exactly helper and in case of error we want to know line
 func runThpChan(b *testing.B, producersCnt int, consumersCnt int, bufferSize int) {
 	canRun := &sync.WaitGroup{}
 	canRun.Add(1)

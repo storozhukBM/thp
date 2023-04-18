@@ -25,7 +25,8 @@
                     "unused",
                     "gochecknoglobals",
                     "gosec",
-                    "gocognit"
+                    "gocognit",
+                    "wsl"
                 ]
             }
         ]
@@ -36,7 +37,6 @@
             "bidichk",
             "bodyclose",
             "bodyclose",
-            "deadcode",
             "decorder",
             "depguard",
             "dogsled",
@@ -75,7 +75,6 @@
             "govet",
             "grouper",
             "ineffassign",
-            "ireturn",
             "lll",
             "misspell",
             "nakedret",
@@ -88,7 +87,6 @@
             "revive",
             "rowserrcheck",
             "staticcheck",
-            "structcheck",
             "stylecheck",
             "tagliatelle",
             "tenv",
@@ -98,9 +96,7 @@
             "unconvert",
             "unparam",
             "unused",
-            "varcheck",
-            "whitespace",
-            "wsl"
+            "whitespace"
         ]
     }
 }

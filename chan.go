@@ -45,8 +45,10 @@ type Producer[T any] struct {
 	batch  []T
 }
 
+// Flush if you call Flush after producer context is canceled,
+// Flush won't block but it is possible that it will send data over the channel.
 func (p *Producer[T]) Flush() {
-	if len(p.batch) == 0 {
+	if len(p.batch) == 0 || p.ctx.Err() != nil {
 		return
 	}
 	// TODO: write documentation on how to avoid items dropping
@@ -97,6 +99,18 @@ func (c *Consumer[T]) prefetch() bool {
 	}
 }
 
+func (c *Consumer[T]) nonBlockingPrefetch() bool {
+	c.idx = 0
+	c.batch = nil
+	select {
+	case batch, ok := <-c.parent.internalChan:
+		c.batch = batch
+		return ok
+	default:
+		return false
+	}
+}
+
 func (c *Consumer[T]) Poll() (T, bool) {
 	if c.idx >= len(c.batch) {
 		ok := c.prefetch()
@@ -110,7 +124,15 @@ func (c *Consumer[T]) Poll() (T, bool) {
 }
 
 func (c *Consumer[T]) NonBlockingPoll() (T, bool) {
-	return zero[T](), false
+	if c.idx >= len(c.batch) {
+		ok := c.nonBlockingPrefetch()
+		if !ok {
+			return zero[T](), false
+		}
+	}
+	item := c.batch[c.idx]
+	c.idx++
+	return item, true
 }
 
 func zero[T any]() T {

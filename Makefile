@@ -27,9 +27,13 @@ lint: clean ## Run linters
 	$(golangci) run .
 
 test: clean format ## Run tests
-	go test -race -coverprofile coverage.out ./...
+	go test -race -count 1 ./...
 
-coverage: test ## Measure and show coverage profile
+qtest: clean ## Run quick tests
+	go test ./...
+
+coverage: ## Measure and show coverage profile
+	go test -coverprofile coverage.out ./...
 	go tool cover -html=coverage.out
 
 bench: ## Run benchmarks and show benchart

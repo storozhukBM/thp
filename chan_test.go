@@ -13,6 +13,8 @@ import (
 )
 
 func TestNewChan(t *testing.T) {
+	t.Parallel()
+
 	expectPanic(t, func() {
 		thp.NewChan[*int](-1)
 	}, thp.ErrChanBatchSize)
@@ -23,6 +25,8 @@ func TestNewChan(t *testing.T) {
 }
 
 func TestPerefetch(t *testing.T) {
+	t.Parallel()
+
 	ch, chCloser := thp.NewChan[int](3)
 	defer chCloser()
 
@@ -52,6 +56,78 @@ func TestPerefetch(t *testing.T) {
 	oneMoreValue, ok := consumer.Poll()
 	eq(t, false, ok)
 	eq(t, 0, oneMoreValue)
+}
+
+func TestNonBlockingFetch(t *testing.T) {
+	t.Parallel()
+
+	// New channel
+	ch, chCloser := thp.NewChan[string](3)
+
+	consumer := ch.Consumer(context.Background())
+	// Check NonBlockingPoll is empty on empty channel
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "", s)
+		eq(t, false, ok)
+	}
+
+	producerCtx, producerCtxCancel := context.WithCancel(context.Background())
+
+	// Put one item into a batch, but don't flush
+	producer, flush := ch.Producer(producerCtx)
+	producer.Put("a")
+
+	// Check that NonBlockingPoll is still empty on empty channel
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "", s)
+		eq(t, false, ok)
+	}
+
+	// Flush to commit batch
+	flush()
+
+	// Check that NonBlockingPoll returns expected value
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "a", s)
+		eq(t, true, ok)
+	}
+	// Now check that channel is empty
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "", s)
+		eq(t, false, ok)
+	}
+
+	// Empty batch flush
+	flush()
+
+	// Check that NonBlockingPoll is still empty on empty channel
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "", s)
+		eq(t, false, ok)
+	}
+
+	producerCtxCancel()
+
+	// Check that NonBlockingPoll is still empty on empty channel
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "", s)
+		eq(t, false, ok)
+	}
+
+	chCloser()
+
+	// Check that NonBlockingPoll is still empty on closed channel
+	{
+		s, ok := consumer.NonBlockingPoll()
+		eq(t, "", s)
+		eq(t, false, ok)
+	}
 }
 
 func TestChan(t *testing.T) {
@@ -196,6 +272,12 @@ func expectPanic(t *testing.T, f func(), expectedError error) {
 				if !errors.Is(actualPanic, expectedError) {
 					t.Fatalf(
 						"unexpected error type. expected %T(%v); actual: %T(%v)",
+						expectedError, expectedError, actualPanic, actualPanic,
+					)
+				}
+				if actualPanic.Error() != expectedError.Error() {
+					t.Fatalf(
+						"unexpected error formatting. expected %T(%v); actual: %T(%v)",
 						expectedError, expectedError, actualPanic, actualPanic,
 					)
 				}

@@ -11,15 +11,17 @@ import (
 )
 
 func BenchmarkChanThroughput(b *testing.B) {
-	for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
-		b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "standard", 8, 8, bufSize), func(b *testing.B) {
-			runStandardChan(b, 8, 8, bufSize)
-		})
-	}
-	for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
-		b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "thp", 8, 8, bufSize), func(b *testing.B) {
-			runThpChan(b, 8, 8, bufSize)
-		})
+	for pIdx := 1; pIdx < 32000; pIdx *= 2 {
+		for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
+			b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "standard", pIdx, 8, bufSize), func(b *testing.B) {
+				runStandardChan(b, pIdx, 8, bufSize)
+			})
+		}
+		for bufSize := 1; bufSize <= 1024; bufSize *= 2 {
+			b.Run(fmt.Sprintf("type:%s;pCnt:%d;cCnt:%d;buf:%d", "thp", pIdx, 8, bufSize), func(b *testing.B) {
+				runThpChan(b, pIdx, 8, bufSize)
+			})
+		}
 	}
 }
 

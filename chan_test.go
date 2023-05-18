@@ -67,9 +67,10 @@ func TestNonBlockingFetch(t *testing.T) {
 	consumer := ch.Consumer(context.Background())
 	// Check NonBlockingPoll is empty on empty channel
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "", s)
 		eq(t, false, ok)
+		eq(t, true, stillOpen)
 	}
 
 	producerCtx, producerCtxCancel := context.WithCancel(context.Background())
@@ -80,9 +81,10 @@ func TestNonBlockingFetch(t *testing.T) {
 
 	// Check that NonBlockingPoll is still empty on empty channel
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "", s)
 		eq(t, false, ok)
+		eq(t, true, stillOpen)
 	}
 
 	// Flush to commit batch
@@ -90,15 +92,17 @@ func TestNonBlockingFetch(t *testing.T) {
 
 	// Check that NonBlockingPoll returns expected value
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "a", s)
 		eq(t, true, ok)
+		eq(t, true, stillOpen)
 	}
 	// Now check that channel is empty
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "", s)
 		eq(t, false, ok)
+		eq(t, true, stillOpen)
 	}
 
 	// Empty batch flush
@@ -106,27 +110,30 @@ func TestNonBlockingFetch(t *testing.T) {
 
 	// Check that NonBlockingPoll is still empty on empty channel
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "", s)
 		eq(t, false, ok)
+		eq(t, true, stillOpen)
 	}
 
 	producerCtxCancel()
 
 	// Check that NonBlockingPoll is still empty on empty channel
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "", s)
 		eq(t, false, ok)
+		eq(t, true, stillOpen)
 	}
 
 	chCloser()
 
 	// Check that NonBlockingPoll is still empty on closed channel
 	{
-		s, ok := consumer.NonBlockingPoll()
+		s, ok, stillOpen := consumer.NonBlockingPoll()
 		eq(t, "", s)
 		eq(t, false, ok)
+		eq(t, false, stillOpen)
 	}
 }
 

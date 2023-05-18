@@ -99,15 +99,16 @@ func (c *Consumer[T]) prefetch() bool {
 	}
 }
 
-func (c *Consumer[T]) nonBlockingPrefetch() bool {
+//nolint:nonamedreturns // here we usenamesreturns to documents meaning of two returned booleans
+func (c *Consumer[T]) nonBlockingPrefetch() (readSuccess bool, channelIsOpen bool) {
 	c.idx = 0
 	c.batch = nil
 	select {
 	case batch, ok := <-c.parent.internalChan:
 		c.batch = batch
-		return ok
+		return ok, ok
 	default:
-		return false
+		return false, true
 	}
 }
 
@@ -123,16 +124,17 @@ func (c *Consumer[T]) Poll() (T, bool) {
 	return item, true
 }
 
-func (c *Consumer[T]) NonBlockingPoll() (T, bool) {
+//nolint:nonamedreturns // here we usenamesreturns to documents meaning of two last returned booleans
+func (c *Consumer[T]) NonBlockingPoll() (value T, readSuccess bool, channelIsOpen bool) {
 	if c.idx >= len(c.batch) {
-		ok := c.nonBlockingPrefetch()
-		if !ok {
-			return zero[T](), false
+		success, open := c.nonBlockingPrefetch()
+		if !success {
+			return zero[T](), success, open
 		}
 	}
 	item := c.batch[c.idx]
 	c.idx++
-	return item, true
+	return item, true, true
 }
 
 func zero[T any]() T {

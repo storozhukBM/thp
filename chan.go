@@ -45,6 +45,21 @@ type Producer[T any] struct {
 	batch  []T
 }
 
+func (p *Producer[T]) NonBlockingFlush() bool {
+	if len(p.batch) == 0 || p.ctx.Err() != nil {
+		return false
+	}
+	// TODO: write documentation on how to avoid items dropping
+	// in case of ctx cancelation using detached context
+	select {
+	case p.parent.internalChan <- p.batch:
+		p.batch = make([]T, 0, p.parent.batchSize)
+		return true
+	default:
+		return false
+	}
+}
+
 // Flush if you call Flush after producer context is canceled,
 // Flush won't block but it is possible that it will send data over the channel.
 func (p *Producer[T]) Flush() {

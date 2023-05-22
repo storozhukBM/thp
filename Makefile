@@ -2,6 +2,7 @@ benchstat := go run golang.org/x/perf/cmd/benchstat@v0.0.0-20220920022801-e8d778
 benchart := go run github.com/storozhukBM/benchart@v1.0.0
 golangci := go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.52.2
 gofumpt := go run mvdan.cc/gofumpt@v0.4.0
+gci := go run github.com/daixiang0/gci@v0.10.1
 
 BOLD = \033[1m
 CLEAR = \033[0m
@@ -20,7 +21,10 @@ clean: ## Clean intermediate coverate, profiler and benchmark result files
 	@rm -f coverage.out
 	@rm -f result.html
 
-format: ## Run formatting
+gci: ## Fix imports order
+	$(gci) write .
+
+format: gci ## Run formatting
 	$(gofumpt) -l -w .
 
 lint: clean ## Run linters

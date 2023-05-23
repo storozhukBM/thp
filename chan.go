@@ -3,6 +3,7 @@ package thp
 import (
 	"context"
 	"runtime"
+	"sync"
 )
 
 const ErrChanBatchSize chanError = "Batch size for thp.Chan can't be lower than 1"
@@ -10,6 +11,7 @@ const ErrChanBatchSize chanError = "Batch size for thp.Chan can't be lower than 
 type Chan[T any] struct {
 	batchSize    int
 	internalChan chan []T
+	batchPool    sync.Pool
 }
 
 func NewChan[T any](batchSize int) (*Chan[T], func()) {
@@ -20,6 +22,11 @@ func NewChan[T any](batchSize int) (*Chan[T], func()) {
 	ch := &Chan[T]{
 		batchSize:    batchSize,
 		internalChan: make(chan []T, runtime.NumCPU()),
+		batchPool: sync.Pool{
+			New: func() any {
+				return make([]T, 0, batchSize)
+			},
+		},
 	}
 
 	return ch, ch.Close
@@ -29,11 +36,22 @@ func (ch *Chan[T]) Close() {
 	close(ch.internalChan)
 }
 
+func (ch *Chan[T]) getBatchFromPool() []T {
+	//nolint:forcetypeassert // panic on type missmatch is fine here
+	return ch.batchPool.Get().([]T)
+}
+
+func (ch *Chan[T]) putBatchToPool(batch []T) {
+	batch = batch[:0]
+	//nolint:staticcheck // we will revisit potential allocation here later
+	ch.batchPool.Put(batch)
+}
+
 func (ch *Chan[T]) Producer(ctx context.Context) (*Producer[T], func()) {
 	result := &Producer[T]{
 		parent: ch,
 		ctx:    ctx,
-		batch:  make([]T, 0, ch.batchSize),
+		batch:  ch.getBatchFromPool(),
 	}
 
 	return result, result.Flush
@@ -53,7 +71,7 @@ func (p *Producer[T]) NonBlockingFlush() bool {
 	// in case of ctx cancelation using detached context
 	select {
 	case p.parent.internalChan <- p.batch:
-		p.batch = make([]T, 0, p.parent.batchSize)
+		p.batch = p.parent.getBatchFromPool()
 		return true
 	default:
 		return false
@@ -70,12 +88,12 @@ func (p *Producer[T]) Flush() {
 	// in case of ctx cancelation using detached context
 	select {
 	case p.parent.internalChan <- p.batch:
+		p.batch = p.parent.getBatchFromPool()
 	case <-p.ctx.Done():
 		// we can't block this goroutine anymore
 		// and will drop batched items
+		p.batch = nil
 	}
-
-	p.batch = make([]T, 0, p.parent.batchSize)
 }
 
 func (p *Producer[T]) Put(v T) {
@@ -113,6 +131,9 @@ func (ch *Chan[T]) Consumer(ctx context.Context) *Consumer[T] {
 
 func (c *Consumer[T]) prefetch() bool {
 	c.idx = 0
+	if len(c.batch) > 0 {
+		c.parent.putBatchToPool(c.batch)
+	}
 	c.batch = nil
 	select {
 	case batch, ok := <-c.parent.internalChan:
@@ -126,6 +147,9 @@ func (c *Consumer[T]) prefetch() bool {
 //nolint:nonamedreturns // here we usenamesreturns to documents meaning of two returned booleans
 func (c *Consumer[T]) nonBlockingPrefetch() (readSuccess bool, channelIsOpen bool) {
 	c.idx = 0
+	if len(c.batch) > 0 {
+		c.parent.putBatchToPool(c.batch)
+	}
 	c.batch = nil
 	select {
 	case batch, ok := <-c.parent.internalChan:

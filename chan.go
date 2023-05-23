@@ -85,6 +85,15 @@ func (p *Producer[T]) Put(v T) {
 	}
 }
 
+func (p *Producer[T]) NonBlockingPut(v T) bool {
+	p.batch = append(p.batch, v)
+	if len(p.batch) >= p.parent.batchSize {
+		flush := p.NonBlockingFlush()
+		return flush
+	}
+	return true
+}
+
 type Consumer[T any] struct {
 	ctx    context.Context
 	parent *Chan[T]

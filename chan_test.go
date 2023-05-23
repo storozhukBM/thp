@@ -123,6 +123,74 @@ func TestNonBlockingFlush(t *testing.T) {
 	}
 }
 
+func TestNonBlockingPut(t *testing.T) {
+	t.Parallel()
+
+	ch, chCloser := thp.NewChan[int](3)
+	defer chCloser()
+
+	consumer := ch.Consumer(context.Background())
+	// Check NonBlockingPoll is empty on empty channel
+	{
+		s, ok, stillOpen := consumer.NonBlockingPoll()
+		eq(t, 0, s)
+		eq(t, false, ok)
+		eq(t, true, stillOpen)
+	}
+	pCtx, pCtxCancel := context.WithCancel(context.Background())
+	defer pCtxCancel()
+
+	producer, flush := ch.Producer(pCtx)
+	flush()
+
+	// Check NonBlockingPoll is empty after empty flush
+	{
+		s, ok, stillOpen := consumer.NonBlockingPoll()
+		eq(t, 0, s)
+		eq(t, false, ok)
+		eq(t, true, stillOpen)
+	}
+
+	// Check NonBlockingFlush goes returns false on empty batch
+	{
+		result := producer.NonBlockingFlush()
+		eq(t, false, result)
+	}
+
+	{
+		ok := producer.NonBlockingPut(1)
+		eq(t, true, ok)
+	}
+
+	// Check NonBlockingPoll is empty without flush
+	{
+		s, ok, stillOpen := consumer.NonBlockingPoll()
+		eq(t, 0, s)
+		eq(t, false, ok)
+		eq(t, true, stillOpen)
+	}
+	// Check NonBlockingPoll goes through with first item
+	{
+		result := producer.NonBlockingFlush()
+		eq(t, true, result)
+	}
+
+	// thp.Chan internally has capacity == runtime.NumCPU
+	for i := 1; i < runtime.NumCPU(); i++ {
+		eq(t, true, producer.NonBlockingPut(i+1))
+		eq(t, true, producer.NonBlockingPut(i+1))
+		eq(t, true, producer.NonBlockingPut(i+1))
+	}
+
+	// Next Flush should block, but non-blocking fluch just returns false
+	{
+		eq(t, true, producer.NonBlockingPut(runtime.NumCPU()+1))
+		eq(t, true, producer.NonBlockingPut(runtime.NumCPU()+1))
+		result := producer.NonBlockingPut(runtime.NumCPU() + 1)
+		eq(t, false, result)
+	}
+}
+
 func TestNonBlockingFetch(t *testing.T) {
 	t.Parallel()
 

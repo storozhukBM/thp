@@ -14,6 +14,7 @@ import (
 )
 
 func TestExample(t *testing.T) {
+	ctx := context.Background()
 	ch, chCloser := thp.NewChan[int](1024)
 	producersWg := &sync.WaitGroup{}
 	producersCount := 16
@@ -22,7 +23,7 @@ func TestExample(t *testing.T) {
 	for i := 0; i < producersCount; i++ {
 		go func() {
 			defer producersWg.Done()
-			producer, flush := ch.Producer(context.Background())
+			producer, flush := ch.Producer(ctx)
 			defer flush()
 			for j := 0; j < itemsPerProducer; j++ {
 				producer.Put(1)
@@ -37,7 +38,7 @@ func TestExample(t *testing.T) {
 	for i := 0; i < consumersCount; i++ {
 		go func() {
 			defer consumersWg.Done()
-			consumer := ch.Consumer(context.Background())
+			consumer := ch.Consumer(ctx)
 			result := 0
 			item, ok := consumer.Poll()
 			for ; ok; item, ok = consumer.Poll() {

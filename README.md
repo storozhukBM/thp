@@ -39,6 +39,8 @@ memory allocations during batch creation and disposal.
 <td>
 
 ```go
+ 
+
 ch := make(chan int, 1024)
 producersWg := &sync.WaitGroup{}
 producersCount := 16
@@ -92,6 +94,8 @@ if counter.Load() != expectedResult {
 <td>
 
 ```go
+ctx := context.Background()
+
 ch, chCloser := thp.NewChan[int](1024)
 producersWg := &sync.WaitGroup{}
 producersCount := 16
@@ -101,7 +105,7 @@ producersWg.Add(producersCount)
 for i := 0; i < producersCount; i++ {
   go func() {
     defer producersWg.Done()
-    producer, flush := ch.Producer(context.Background())
+    producer, flush := ch.Producer(ctx)
     defer flush()
     for j := 0; j < itemsPerProducer; j++ {
       producer.Put(1)
@@ -116,7 +120,7 @@ counter := &atomic.Int64{}
 for i := 0; i < consumersCount; i++ {
   go func() {
     defer consumersWg.Done()
-    consumer := ch.Consumer(context.Background())
+    consumer := ch.Consumer(ctx)
     result := 0
     item, ok := consumer.Poll()
     for ; ok; item, ok = consumer.Poll() {

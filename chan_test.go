@@ -13,6 +13,90 @@ import (
 	"github.com/storozhukBM/thp"
 )
 
+func TestExample(t *testing.T) {
+	ch, chCloser := thp.NewChan[int](1024)
+	producersWg := &sync.WaitGroup{}
+	producersCount := 16
+	itemsPerProducer := 1_000_000
+	producersWg.Add(producersCount)
+	for i := 0; i < producersCount; i++ {
+		go func() {
+			defer producersWg.Done()
+			producer, flush := ch.Producer(context.Background())
+			defer flush()
+			for j := 0; j < itemsPerProducer; j++ {
+				producer.Put(1)
+			}
+		}()
+	}
+
+	consumersCount := 16
+	consumersWg := &sync.WaitGroup{}
+	consumersWg.Add(consumersCount)
+	counter := &atomic.Int64{}
+	for i := 0; i < consumersCount; i++ {
+		go func() {
+			defer consumersWg.Done()
+			consumer := ch.Consumer(context.Background())
+			result := 0
+			item, ok := consumer.Poll()
+			for ; ok; item, ok = consumer.Poll() {
+				result += item
+			}
+			counter.Add(int64(result))
+		}()
+	}
+
+	producersWg.Wait()
+	chCloser()
+	consumersWg.Wait()
+
+	expectedResult := int64(producersCount * itemsPerProducer)
+	if counter.Load() != expectedResult {
+		t.Errorf("result is not as expected: %v != %v", counter.Load(), expectedResult)
+	}
+}
+
+func TestStandardExample(t *testing.T) {
+	ch := make(chan int, 1024)
+	producersWg := &sync.WaitGroup{}
+	producersCount := 16
+	itemsPerProducer := 1_000_000
+	producersWg.Add(producersCount)
+	for i := 0; i < producersCount; i++ {
+		go func() {
+			defer producersWg.Done()
+			for j := 0; j < itemsPerProducer; j++ {
+				ch <- 1
+			}
+		}()
+	}
+
+	consumersCount := 16
+	consumersWg := &sync.WaitGroup{}
+	consumersWg.Add(consumersCount)
+	counter := &atomic.Int64{}
+	for i := 0; i < consumersCount; i++ {
+		go func() {
+			defer consumersWg.Done()
+			result := 0
+			for item := range ch {
+				result += item
+			}
+			counter.Add(int64(result))
+		}()
+	}
+
+	producersWg.Wait()
+	close(ch)
+	consumersWg.Wait()
+
+	expectedResult := int64(producersCount * itemsPerProducer)
+	if counter.Load() != expectedResult {
+		t.Errorf("result is not as expected: %v != %v", counter.Load(), expectedResult)
+	}
+}
+
 func TestNewChan(t *testing.T) {
 	t.Parallel()
 

@@ -139,3 +139,4 @@ if counter.Load() != expectedResult {
 
 Run `make bench` to get results on your machine.
 
+<img width="1043" alt="Benchmark Results" src="https://github.com/storozhukBM/thp/assets/3532750/49f41961-8192-4476-be17-ce99264ed57d">

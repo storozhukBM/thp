@@ -28,7 +28,7 @@ format: gci ## Run formatting
 	$(gofumpt) -l -w .
 
 lint: clean ## Run linters
-	$(golangci) run .
+	$(golangci) run ./...
 
 test: clean format ## Run tests
 	go test -race -count 1 ./...

@@ -1,7 +1,8 @@
-# thp
-High throughput primitives library.
-
-Supported primitives:
+# **thp** - High throughput primitives library
+[![Go Reference](https://pkg.go.dev/badge/github.com/storozhukBM/thp.svg)](https://pkg.go.dev/github.com/storozhukBM/thp)
+![Build](https://github.com/storozhukBM/thp/actions/workflows/go.yml/badge.svg) 
+[![Go Report Card](https://goreportcard.com/badge/github.com/storozhukBM/thp)](https://goreportcard.com/report/github.com/storozhukBM/thp) 
+[![Coverage Status](https://coveralls.io/repos/github/storozhukBM/thp/badge.svg)](https://coveralls.io/github/storozhukBM/thp)
 
 ## **thp.Chan[T any]**
 

@@ -14,7 +14,6 @@ import (
 )
 
 func TestExample(t *testing.T) {
-	ctx := context.Background()
 	ch, chCloser := thp.NewChan[int](1024)
 	producersWg := &sync.WaitGroup{}
 	producersCount := 16
@@ -23,7 +22,7 @@ func TestExample(t *testing.T) {
 	for i := 0; i < producersCount; i++ {
 		go func() {
 			defer producersWg.Done()
-			producer, flush := ch.Producer(ctx)
+			producer, flush := ch.Producer()
 			defer flush()
 			for j := 0; j < itemsPerProducer; j++ {
 				producer.Put(1)
@@ -38,7 +37,7 @@ func TestExample(t *testing.T) {
 	for i := 0; i < consumersCount; i++ {
 		go func() {
 			defer consumersWg.Done()
-			consumer := ch.Consumer(ctx)
+			consumer := ch.Consumer()
 			result := 0
 			item, ok := consumer.Poll()
 			for ; ok; item, ok = consumer.Poll() {
@@ -110,13 +109,13 @@ func TestNewChan(t *testing.T) {
 	_, _ = thp.NewChan[*int](1)
 }
 
-func TestPerefetch(t *testing.T) {
+func TestPrefetch(t *testing.T) {
 	t.Parallel()
 
 	ch, chCloser := thp.NewChan[int](3)
 	defer chCloser()
 
-	producer, flush := ch.Producer(context.Background())
+	producer, flush := ch.Producer()
 	go func() {
 		defer flush()
 		for i := 0; i < 3; i++ {
@@ -126,20 +125,25 @@ func TestPerefetch(t *testing.T) {
 
 	res := 0
 	ctx, cancel := context.WithCancel(context.Background())
-	consumer := ch.Consumer(ctx)
+	consumer := ch.Consumer()
 	for i := 0; i < 3; i++ {
-		value, ok := consumer.Poll()
+		value, ok, err := consumer.PollCtx(ctx)
 		eq(t, true, ok)
+		eq(t, nil, err)
 		res += value
 	}
 	eq(t, 3, res)
 
 	cancel()
-	value, ok := consumer.Poll()
+	value, ok, err := consumer.PollCtx(ctx)
+	eq(t, true, err != nil)
+	eq(t, "context canceled", err.Error())
 	eq(t, false, ok)
 	eq(t, 0, value)
 
-	oneMoreValue, ok := consumer.Poll()
+	oneMoreValue, ok, err := consumer.PollCtx(ctx)
+	eq(t, true, err != nil)
+	eq(t, "context canceled", err.Error())
 	eq(t, false, ok)
 	eq(t, 0, oneMoreValue)
 }
@@ -150,7 +154,7 @@ func TestNonBlockingFlush(t *testing.T) {
 	ch, chCloser := thp.NewChan[int](3)
 	defer chCloser()
 
-	consumer := ch.Consumer(context.Background())
+	consumer := ch.Consumer()
 	// Check NonBlockingPoll is empty on empty channel
 	{
 		s, ok, stillOpen := consumer.NonBlockingPoll()
@@ -158,10 +162,8 @@ func TestNonBlockingFlush(t *testing.T) {
 		eq(t, false, ok)
 		eq(t, true, stillOpen)
 	}
-	pCtx, pCtxCancel := context.WithCancel(context.Background())
-	defer pCtxCancel()
 
-	producer, flush := ch.Producer(pCtx)
+	producer, flush := ch.Producer()
 	flush()
 
 	// Check NonBlockingPoll is empty after empty flush
@@ -214,7 +216,7 @@ func TestNonBlockingPut(t *testing.T) {
 	ch, chCloser := thp.NewChan[int](3)
 	defer chCloser()
 
-	consumer := ch.Consumer(context.Background())
+	consumer := ch.Consumer()
 	// Check NonBlockingPoll is empty on empty channel
 	{
 		s, ok, stillOpen := consumer.NonBlockingPoll()
@@ -222,10 +224,8 @@ func TestNonBlockingPut(t *testing.T) {
 		eq(t, false, ok)
 		eq(t, true, stillOpen)
 	}
-	pCtx, pCtxCancel := context.WithCancel(context.Background())
-	defer pCtxCancel()
 
-	producer, flush := ch.Producer(pCtx)
+	producer, flush := ch.Producer()
 	flush()
 
 	// Check NonBlockingPoll is empty after empty flush
@@ -282,7 +282,7 @@ func TestNonBlockingFetch(t *testing.T) {
 	// New channel
 	ch, chCloser := thp.NewChan[string](3)
 
-	consumer := ch.Consumer(context.Background())
+	consumer := ch.Consumer()
 	// Check NonBlockingPoll is empty on empty channel
 	{
 		s, ok, stillOpen := consumer.NonBlockingPoll()
@@ -291,10 +291,8 @@ func TestNonBlockingFetch(t *testing.T) {
 		eq(t, true, stillOpen)
 	}
 
-	producerCtx, producerCtxCancel := context.WithCancel(context.Background())
-
 	// Put one item into a batch, but don't flush
-	producer, flush := ch.Producer(producerCtx)
+	producer, flush := ch.Producer()
 	producer.Put("a")
 
 	// Check that NonBlockingPoll is still empty on empty channel
@@ -325,16 +323,6 @@ func TestNonBlockingFetch(t *testing.T) {
 
 	// Empty batch flush
 	flush()
-
-	// Check that NonBlockingPoll is still empty on empty channel
-	{
-		s, ok, stillOpen := consumer.NonBlockingPoll()
-		eq(t, "", s)
-		eq(t, false, ok)
-		eq(t, true, stillOpen)
-	}
-
-	producerCtxCancel()
 
 	// Check that NonBlockingPoll is still empty on empty channel
 	{
@@ -400,7 +388,7 @@ func runPrimitiveChanTest(t *testing.T, batchSize int, producersCnt int, consume
 	for i := 0; i < producersCnt; i++ {
 		go func() {
 			defer producersWg.Done()
-			producer, flush := ch.Producer(context.Background())
+			producer, flush := ch.Producer()
 			defer flush()
 			for j := 0; j < itemsPerProducer; j++ {
 				producer.Put(1)
@@ -414,7 +402,7 @@ func runPrimitiveChanTest(t *testing.T, batchSize int, producersCnt int, consume
 	for i := 0; i < consumersCnt; i++ {
 		go func() {
 			defer consumersWg.Done()
-			consumer := ch.Consumer(context.Background())
+			consumer := ch.Consumer()
 			result := 0
 			item, ok := consumer.Poll()
 			for ; ok; item, ok = consumer.Poll() {
@@ -442,7 +430,7 @@ func runObjChanTest(t *testing.T, batchSize int, producersCnt int, consumersCnt 
 	for i := 0; i < producersCnt; i++ {
 		go func() {
 			defer producersWg.Done()
-			producer, flush := ch.Producer(context.Background())
+			producer, flush := ch.Producer()
 			defer flush()
 			for j := 0; j < itemsPerProducer; j++ {
 				msg := 1
@@ -457,7 +445,7 @@ func runObjChanTest(t *testing.T, batchSize int, producersCnt int, consumersCnt 
 	for i := 0; i < consumersCnt; i++ {
 		go func() {
 			defer consumersWg.Done()
-			consumer := ch.Consumer(context.Background())
+			consumer := ch.Consumer()
 			result := 0
 			item, ok := consumer.Poll()
 			for ; ok; item, ok = consumer.Poll() {

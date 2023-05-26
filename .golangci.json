@@ -1,0 +1,102 @@
+{
+    "linters-settings": {
+        "govet": {
+            "check-shadowing": true
+        },
+        "nakedret": {
+            "lines": 1
+        },
+        "godox": {
+            "keywords": [
+                "NOCOMMIT",
+                "NOCOMIT"
+            ]
+        }
+    },
+    "issues": {
+        "exclude-rules": [
+            {
+                "path": "_test.go",
+                "linters": [
+                    "dupl",
+                    "goconst",
+                    "gomnd",
+                    "structcheck",
+                    "unused",
+                    "gochecknoglobals",
+                    "gosec",
+                    "gocognit",
+                    "wsl"
+                ]
+            }
+        ]
+    },
+    "linters": {
+        "enable": [
+            "asciicheck",
+            "bidichk",
+            "bodyclose",
+            "bodyclose",
+            "decorder",
+            "depguard",
+            "dogsled",
+            "dupl",
+            "durationcheck",
+            "errcheck",
+            "errchkjson",
+            "errname",
+            "errorlint",
+            "execinquery",
+            "exhaustive",
+            "exhaustruct",
+            "exportloopref",
+            "exportloopref",
+            "forcetypeassert",
+            "gci",
+            "gochecknoglobals",
+            "gochecknoinits",
+            "gocognit",
+            "goconst",
+            "gocritic",
+            "gocyclo",
+            "godot",
+            "godox",
+            "goerr113",
+            "gofmt",
+            "gofumpt",
+            "goheader",
+            "goimports",
+            "gomnd",
+            "gomoddirectives",
+            "gomodguard",
+            "goprintffuncname",
+            "gosec",
+            "gosimple",
+            "govet",
+            "grouper",
+            "ineffassign",
+            "lll",
+            "misspell",
+            "nakedret",
+            "nestif",
+            "nilerr",
+            "noctx",
+            "nolintlint",
+            "nonamedreturns",
+            "prealloc",
+            "revive",
+            "rowserrcheck",
+            "staticcheck",
+            "stylecheck",
+            "tagliatelle",
+            "tenv",
+            "thelper",
+            "tparallel",
+            "typecheck",
+            "unconvert",
+            "unparam",
+            "unused",
+            "whitespace"
+        ]
+    }
+}

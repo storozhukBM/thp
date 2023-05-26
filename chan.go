@@ -192,12 +192,12 @@ func (p *Producer[T]) Flush() {
 // If the provided context is canceled, the remaining items stay in the buffer.
 // Note: This method is intended to be used exclusively by a goroutine that owns this Producer.
 func (p *Producer[T]) FlushCtx(ctx context.Context) error {
-	if len(p.buf) == 0 {
-		return nil
-	}
 	ctxErr := ctx.Err()
 	if ctxErr != nil {
 		return ctxErr
+	}
+	if len(p.buf) == 0 {
+		return nil
 	}
 
 	p.batch.buf = p.buf
@@ -208,7 +208,7 @@ func (p *Producer[T]) FlushCtx(ctx context.Context) error {
 		p.buf = p.batch.buf
 		return nil
 	case <-ctx.Done():
-		return ctxErr
+		return ctx.Err()
 	}
 }
 

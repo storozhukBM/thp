@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/storozhukBM/thp"
 )
@@ -148,6 +149,98 @@ func TestPrefetch(t *testing.T) {
 	eq(t, 0, oneMoreValue)
 }
 
+func TestFlushCtx(t *testing.T) {
+	t.Parallel()
+
+	ch, chCloser := thp.NewChan[int](3)
+	defer chCloser()
+
+	consumerCtx, consumerCtxCancel := context.WithCancel(context.Background())
+	consumer := ch.Consumer()
+
+	producerCtx, producerCtxCancel := context.WithCancel(context.Background())
+	producer, _ := ch.Producer()
+
+	// FlushCtx of empty context returns no error
+	{
+		errFlush := producer.FlushCtx(producerCtx)
+		eq(t, nil, errFlush)
+	}
+
+	{
+		errPut := producer.PutCtx(producerCtx, 1)
+		eq(t, nil, errPut)
+	}
+
+	// Check FlushCtx goes through with first item
+	{
+		errFlush := producer.FlushCtx(producerCtx)
+		eq(t, nil, errFlush)
+	}
+
+	// thp.Chan internally has capacity == runtime.NumCPU
+	for i := 1; i < runtime.NumCPU(); i++ {
+		{
+			errPut := producer.PutCtx(producerCtx, i+1)
+			eq(t, nil, errPut)
+		}
+		{
+			errPut := producer.PutCtx(producerCtx, i+1)
+			eq(t, nil, errPut)
+		}
+		{
+			errPut := producer.PutCtx(producerCtx, i+1)
+			eq(t, nil, errPut)
+		}
+	}
+
+	pwg := &sync.WaitGroup{}
+	pwg.Add(1)
+	// Next FlushCtx should block, but context cancellation unblocks it
+	go func() {
+		defer pwg.Done()
+		errPut := producer.PutCtx(producerCtx, runtime.NumCPU())
+		eq(t, nil, errPut)
+		errFlush := producer.FlushCtx(producerCtx)
+		eq(t, true, errFlush != nil)
+		eq(t, "context canceled", errFlush.Error())
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	producerCtxCancel()
+	pwg.Wait()
+
+	// FlushCtx on canceled ctx returns error right away
+	{
+		errFlush := producer.FlushCtx(producerCtx)
+		eq(t, true, errFlush != nil)
+		eq(t, "context canceled", errFlush.Error())
+	}
+
+	for {
+		_, success, _ := consumer.NonBlockingPoll()
+		if !success {
+			break
+		}
+	}
+
+	cwg := &sync.WaitGroup{}
+	cwg.Add(1)
+	// Next PollCtx should block, but context cancellation unblocks it
+	go func() {
+		defer cwg.Done()
+		value, success, errPoll := consumer.PollCtx(consumerCtx)
+		eq(t, 0, value)
+		eq(t, false, success)
+		eq(t, true, errPoll != nil)
+		eq(t, "context canceled", errPoll.Error())
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+	consumerCtxCancel()
+	cwg.Wait()
+}
+
 func TestNonBlockingFlush(t *testing.T) {
 	t.Parallel()
 
@@ -202,7 +295,7 @@ func TestNonBlockingFlush(t *testing.T) {
 		eq(t, true, result)
 	}
 
-	// Next Flush should block, but non-blocking fluch just returns false
+	// Next Flush should block, but non-blocking flush just returns false
 	{
 		producer.Put(runtime.NumCPU())
 		result := producer.NonBlockingFlush()
@@ -267,7 +360,7 @@ func TestNonBlockingPut(t *testing.T) {
 		eq(t, true, producer.NonBlockingPut(i+1))
 	}
 
-	// Next Flush should block, but non-blocking fluch just returns false
+	// Next Flush should block, but non-blocking flush just returns false
 	{
 		eq(t, true, producer.NonBlockingPut(runtime.NumCPU()+1))
 		eq(t, true, producer.NonBlockingPut(runtime.NumCPU()+1))

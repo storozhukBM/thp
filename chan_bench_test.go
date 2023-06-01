@@ -1,7 +1,6 @@
 package thp_test
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -88,7 +87,7 @@ func runThpChan(b *testing.B, producersCnt int, consumersCnt int, bufferSize int
 	for i := 0; i < producersCnt; i++ {
 		go func() {
 			defer producersWg.Done()
-			producer, flush := ch.Producer(context.Background())
+			producer, flush := ch.Producer()
 			defer flush()
 			canRun.Wait()
 			for j := 0; j < itemsPerProducer; j++ {
@@ -103,7 +102,7 @@ func runThpChan(b *testing.B, producersCnt int, consumersCnt int, bufferSize int
 	for i := 0; i < consumersCnt; i++ {
 		go func() {
 			defer consumersWg.Done()
-			consumer := ch.Consumer(context.Background())
+			consumer := ch.Consumer()
 			result := 0
 			canRun.Wait()
 			for item, ok := consumer.Poll(); ok; item, ok = consumer.Poll() {

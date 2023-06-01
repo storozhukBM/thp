@@ -27,13 +27,8 @@ const ErrChanBatchSize chanError = "Batch size for thp.Chan can't be lower than 
 // at the cost of higher latency.
 // You can also manually trigger flushes.
 //
-// Context cancellation is supported, allowing graceful termination of producers
-// and consumers. When a producer's context is canceled, any remaining items in
-// the buffer are dropped. So make sure you flush everything before canceling
-// producers context, if you want your items to reach consumers.
-//
-// Similarly, when a consumer's context is canceled,
-// it stops fetching new batches and signals the end of consumption.
+// Context cancellation is supported via separate methods,
+// allowing graceful termination of producers and consumers.
 //
 // The channel internally manages a sync.Pool to reuse batch buffers and avoid
 // unnecessary allocations. This optimization improves performance by reducing
@@ -79,6 +74,7 @@ func NewChan[T any](batchSize int) (*Chan[T], func()) {
 }
 
 // Close closes the concurrent channel.
+// Close panics on attempted close of already close Chan.
 func (ch *Chan[T]) Close() {
 	close(ch.internalChan)
 }
@@ -106,7 +102,6 @@ func (ch *Chan[T]) putBatchToPool(batch *batch[T]) {
 // Each producer should be exclusively used by a single goroutine to ensure thread safety.
 // Create separate Producer instance for every goroutine that sends messages.
 type Producer[T any] struct {
-	ctx    context.Context
 	parent *Chan[T]
 	batch  *batch[T]
 	// We unpack the batch.buf into a separate field to avoid extra memory hop
@@ -115,34 +110,41 @@ type Producer[T any] struct {
 	buf []T
 }
 
-// Producer creates a producer for the concurrent channel with the given context.
+// Producer creates a producer for the concurrent channel.
 // The producer is responsible for adding items to the channel's buffer and flushing
 // them when the batch size is reached.
-//
-// The provided `ctx` context allows for graceful termination of the producer. If the
-// context is canceled, the producer stops accepting new items, any remaining items in
-// the buffer are dropped. So make sure you flush everything before canceling
-// producers context, if you want your items to reach consumers.
-// You can avoid items dropping on context cancellation by providing detached context
-// when create Producer instance.
 //
 // Note: flush method should be called by the same goroutine that will use the producer.
 //
 // Example usage:
 //
-//	producer, flush := channel.Producer(ctx)
+//	producer, flush := channel.Producer()
 //	defer flush() // Ensure sending items through the channel
 //	producer.Put(item1)
 //	producer.Put(item2)
 //
+// Methods with provided `ctx` allows for graceful termination of the producer. If the
+// context is canceled, the producer stops accepting new items, any remaining items stay in
+// the buffer.
+// WARNING: do not use returned flush method if you want context aware operations,
+// use FlushCtx instead.
+//
+// Example of ctx aware operations usage:
+//
+//	producer, _ := channel.Producer()
+//	defer producer.FlushCtx(ctx) // Ensure sending items through the channel
+//	err := producer.PutCtx(ctx, item)
+//	if err != nil {
+//		return err
+//	}
+//
 // Returns:
 //   - producer: The created producer instance.
 //   - flush: A function to send any remaining items.
-func (ch *Chan[T]) Producer(ctx context.Context) (*Producer[T], func()) {
+func (ch *Chan[T]) Producer() (*Producer[T], func()) {
 	initialBatch := ch.getBatchFromPool()
 	result := &Producer[T]{
 		parent: ch,
-		ctx:    ctx,
 		batch:  initialBatch,
 		buf:    initialBatch.buf,
 	}
@@ -151,13 +153,10 @@ func (ch *Chan[T]) Producer(ctx context.Context) (*Producer[T], func()) {
 
 // NonBlockingFlush attempts to flush the items in the buffer to the channel without blocking.
 // It returns true if the flush was successful, or false if the channel is full.
-// If the producer's context is canceled, the remaining items in the buffer are dropped.
-// You can avoid items dropping on context cancellation by providing detached context
-// when create Producer instance.
 // In most cases you should use regular flush method provided to you upon Producer creation.
 // Note: This method is intended to be used exclusively by a goroutine that owns this Producer.
 func (p *Producer[T]) NonBlockingFlush() bool {
-	if len(p.buf) == 0 || p.ctx.Err() != nil {
+	if len(p.buf) == 0 {
 		return false
 	}
 	p.batch.buf = p.buf
@@ -175,25 +174,41 @@ func (p *Producer[T]) NonBlockingFlush() bool {
 
 // Flush flushes the items in the buffer to the channel, blocking if necessary.
 // If the channel is full, it blocks until there is space available.
-// If the producer's context is canceled, the remaining items in the buffer are dropped.
-// You can avoid items dropping on context cancellation by providing detached context
-// when create Producer instance.
 // Note: This method is intended to be used exclusively by a goroutine that owns this Producer.
 func (p *Producer[T]) Flush() {
-	if len(p.buf) == 0 || p.ctx.Err() != nil {
+	if len(p.buf) == 0 {
 		return
 	}
+	p.batch.buf = p.buf
+	p.parent.internalChan <- p.batch
+	// Batch sent successfully, get a new batch from the pool for the next flush.
+	p.batch = p.parent.getBatchFromPool()
+	p.buf = p.batch.buf
+}
+
+// FlushCtx flushes the items in the buffer to the channel, blocking if necessary.
+// If the channel is full, it blocks until there is space available.
+// It returns error if context gets canceled during flush operation.
+// If the provided context is canceled, the remaining items stay in the buffer.
+// Note: This method is intended to be used exclusively by a goroutine that owns this Producer.
+func (p *Producer[T]) FlushCtx(ctx context.Context) error {
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return ctxErr
+	}
+	if len(p.buf) == 0 {
+		return nil
+	}
+
 	p.batch.buf = p.buf
 	select {
 	case p.parent.internalChan <- p.batch:
 		// Batch sent successfully, get a new batch from the pool for the next flush.
 		p.batch = p.parent.getBatchFromPool()
 		p.buf = p.batch.buf
-	case <-p.ctx.Done():
-		// The producer's context is canceled.
-		// We can't block this goroutine anymore, so we drop the remaining batched items.
-		p.batch = &batch[T]{}
-		p.buf = nil
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -219,6 +234,18 @@ func (p *Producer[T]) Put(v T) {
 	}
 }
 
+// PutCtx adds an item to the producer's buffer.
+// If the buffer reaches the batchSize, it triggers a flush to the channel.
+// It returns error if context gets canceled during flush operation.
+// Note: This method is intended to be used exclusively by a goroutine that owns this Producer.
+func (p *Producer[T]) PutCtx(ctx context.Context, v T) error {
+	p.buf = append(p.buf, v)
+	if len(p.buf) >= p.parent.batchSize {
+		return p.FlushCtx(ctx)
+	}
+	return nil
+}
+
 // Consumer represents a consumer for the concurrent channel.
 // It retrieves items from the channel's buffer and processes them sequentially.
 //
@@ -233,11 +260,11 @@ func (p *Producer[T]) Put(v T) {
 //
 // The consumer supports both blocking and non-blocking operations.
 //
-// Context cancellation is supported, allowing graceful termination of the consumer.
+// Context cancellation is supported via separate method,
+// allowing graceful termination of the consumer.
 // When the consumer's context is canceled, it stops fetching new batches from the
 // internal channel and signals the end of consumption.
 type Consumer[T any] struct {
-	ctx    context.Context
 	parent *Chan[T]
 	idx    int
 	batch  *batch[T]
@@ -251,15 +278,11 @@ type Consumer[T any] struct {
 // The consumer is responsible for retrieving items from the channel's buffer and
 // processing them sequentially.
 //
-// The provided `ctx` context allows for graceful termination of the consumer. If
-// the context is canceled, the consumer stops fetching new batches from the internal
-// channel and signals the end of consumption.
-//
 // Note: This method should be called by the same goroutine that will use the consumer.
 //
 // Example usage:
 //
-//	consumer := channel.Consumer(ctx)
+//	consumer := channel.Consumer()
 //	for {
 //	    item, ok := consumer.Poll()
 //	    if !ok {
@@ -270,9 +293,8 @@ type Consumer[T any] struct {
 //
 // Returns:
 //   - consumer: The created consumer instance.
-func (ch *Chan[T]) Consumer(ctx context.Context) *Consumer[T] {
+func (ch *Chan[T]) Consumer() *Consumer[T] {
 	result := &Consumer[T]{
-		ctx:    ctx,
 		parent: ch,
 		idx:    0,
 		batch:  &batch[T]{},
@@ -312,8 +334,30 @@ func (c *Consumer[T]) nonBlockingPrefetch() (readSuccess bool, channelIsOpen boo
 
 // prefetch fetches the next batch from the channel and prepares the consumer for reading.
 // It returns true if a new batch is fetched successfully,
-// or false if the channel is closed or the context is canceled.
+// or false if the channel is closed.
 func (c *Consumer[T]) prefetch() bool {
+	if cap(c.buf) > 0 {
+		// Return the current batch to the pool.
+		c.parent.putBatchToPool(c.batch)
+	}
+
+	c.idx = 0
+	c.batch = nil
+	c.buf = nil
+
+	batch, ok := <-c.parent.internalChan
+	c.batch = batch
+	if batch != nil {
+		c.buf = batch.buf
+	}
+	return ok
+}
+
+// prefetchCtx fetches the next batch from the channel and prepares the consumer for reading.
+// It returns (true, nil) if a new batch is fetched successfully,
+// or (false, nil) if the channel is closed
+// or (false, error) if the context is canceled.
+func (c *Consumer[T]) prefetchCtx(ctx context.Context) (bool, error) {
 	if cap(c.buf) > 0 {
 		// Return the current batch to the pool.
 		c.parent.putBatchToPool(c.batch)
@@ -329,9 +373,9 @@ func (c *Consumer[T]) prefetch() bool {
 		if batch != nil {
 			c.buf = batch.buf
 		}
-		return ok
-	case <-c.ctx.Done():
-		return false
+		return ok, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
 	}
 }
 
@@ -367,6 +411,26 @@ func (c *Consumer[T]) Poll() (T, bool) {
 	item := c.buf[c.idx]
 	c.idx++
 	return item, true
+}
+
+// PollCtx retrieves the next item from the consumer's buffer.
+// It returns the item and true if successful,
+// or a (zero value, false, nil) if there are no more items
+// or a (zero value, false, error) if context is canceled.
+// Note: This method is intended to be used exclusively by a goroutine that owns this Consumer.
+func (c *Consumer[T]) PollCtx(ctx context.Context) (T, bool, error) {
+	if c.idx >= len(c.buf) {
+		ok, err := c.prefetchCtx(ctx)
+		if err != nil {
+			return zero[T](), false, err
+		}
+		if !ok {
+			return zero[T](), false, nil
+		}
+	}
+	item := c.buf[c.idx]
+	c.idx++
+	return item, true, nil
 }
 
 func zero[T any]() T {

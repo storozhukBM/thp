@@ -15,7 +15,7 @@ help: ## Display this help
 		/^##@/ { printf "\n$(BOLD)%s$(CLEAR)\n", substr($$0, 5) }' \
 		$(MAKEFILE_LIST)
 
-clean: ## Clean intermediate coverate, profiler and benchmark result files
+clean: ## Clean intermediate coverage, profiler and benchmark result files
 	@go clean
 	@rm -f profile.out
 	@rm -f coverage.out

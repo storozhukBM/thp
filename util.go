@@ -2,16 +2,11 @@ package thp
 
 const cacheLineSize = 64
 
-type cacheLinePadding [cacheLineSize]byte
-
 func zero[T any]() T {
 	return *new(T)
 }
 
-func ptr[T any](v T) *T {
-	return &v
-}
-
+//nolint:gomnd // pure magic, described here https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
 func nextHighestPowerOf2(wideness int32) int32 {
 	n := wideness
 	n--

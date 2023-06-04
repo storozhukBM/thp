@@ -17,48 +17,12 @@ func BenchmarkCounterThroughput(b *testing.B) {
 		b.Run(fmt.Sprintf("type:%s;goroutines:%d", "thp", pIdx), func(b *testing.B) {
 			thpCnt(b, pIdx)
 		})
-		b.Run(fmt.Sprintf("type:%s;goroutines:%d", "thp2", pIdx), func(b *testing.B) {
-			thpCnt2(b, pIdx)
-		})
 	}
 }
 
-func thpCnt2(b *testing.B, goroutines int) {
-	counter := thp.NewCounter2(goroutines)
-
-	canRun := &sync.WaitGroup{}
-	canRun.Add(1)
-
-	wg := &sync.WaitGroup{}
-	wg.Add(goroutines)
-
-	incsPerGoroutine := b.N / goroutines
-	for i := 0; i < goroutines; i++ {
-		go func() {
-			defer wg.Done()
-			canRun.Wait()
-
-			for j := 0; j < incsPerGoroutine; j++ {
-				counter.Add(1)
-			}
-		}()
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-	canRun.Done()
-
-	wg.Wait()
-	b.StopTimer()
-
-	expectedResult := int64(goroutines * incsPerGoroutine)
-	if counter.Load() != expectedResult {
-		b.Errorf("result is not as expected: %v != %v", counter.Load(), expectedResult)
-	}
-}
-
+//nolint:thelper // This is not exactly helper and in case of error we want to know line
 func thpCnt(b *testing.B, goroutines int) {
-	counter := thp.NewCounter(goroutines)
+	counter := thp.NewCounterWithWideness(goroutines)
 
 	canRun := &sync.WaitGroup{}
 	canRun.Add(1)
@@ -91,6 +55,7 @@ func thpCnt(b *testing.B, goroutines int) {
 	}
 }
 
+//nolint:thelper // This is not exactly helper and in case of error we want to know line
 func regularAtomicCnt(b *testing.B, goroutines int) {
 	counter := atomic.Int64{}
 

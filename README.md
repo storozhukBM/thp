@@ -192,3 +192,4 @@ if counter.Load() != expectedResult {
 ### Performance
 
 Run `make cntbench` to get results on your machine.
+<img width="1060" alt="Counter benchmark results" src="https://github.com/storozhukBM/thp/assets/3532750/4d97e5f0-8c83-4306-b749-5f55ad7015b8">

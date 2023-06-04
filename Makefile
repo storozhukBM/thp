@@ -15,7 +15,7 @@ help: ## Display this help
 		/^##@/ { printf "\n$(BOLD)%s$(CLEAR)\n", substr($$0, 5) }' \
 		$(MAKEFILE_LIST)
 
-clean: ## Clean intermediate coverate, profiler and benchmark result files
+clean: ## Clean intermediate coverage, profiler and benchmark result files
 	@go clean
 	@rm -f profile.out
 	@rm -f coverage.out
@@ -40,9 +40,21 @@ coverage: ## Measure and show coverage profile
 	go test -coverprofile coverage.out ./...
 	go tool cover -html=coverage.out
 
-bench: ## Run benchmarks and show benchart
+cntprofile: clean ## Get counter CPU profile
+	go test -run=xxx -bench=BenchmarkCounterThroughput -cpuprofile profile.out
+	go tool pprof -http=:8080 profile.out
+
+
+chanbench: ## Run channel benchmarks and show benchart
 	go test -timeout 3h -count=5 -run=xxx -bench=BenchmarkChanThroughput ./... | tee chan_stat.txt
 	$(benchstat) chan_stat.txt
 	$(benchstat) -csv chan_stat.txt > chan_stat.csv
 	$(benchart) 'ChanThroughput;xAxisType=log' chan_stat.csv chan_stat.html
 	open chan_stat.html
+
+cntbench: ## Run counter benchmarks and show benchart
+	go test -timeout 3h -count=5 -run=xxx -bench=BenchmarkCounterThroughput ./... | tee cnt_stat.txt
+	$(benchstat) cnt_stat.txt
+	$(benchstat) -csv cnt_stat.txt > cnt_stat.csv
+	$(benchart) 'CounterThroughput;xAxisType=log' cnt_stat.csv cnt_stat.html
+	open cnt_stat.html

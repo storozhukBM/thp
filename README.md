@@ -148,6 +148,47 @@ if counter.Load() != expectedResult {
 
 ### Performance
 
-Run `make bench` to get results on your machine.
+Run `make chanbench` to get results on your machine.
 
 <img width="1043" alt="Benchmark results" src="https://github.com/storozhukBM/thp/assets/3532750/c327cfe0-3435-4fb0-98f2-8ccf0d401a33">
+
+## **thp.Counter**
+
+Counter is a concurrent counter implementation with striping,
+designed to enhance performance in write-heavy and contended workloads.
+
+It reduces contention by distributing the workload across multiple internal counters.
+Compared to the atomic.Int64 type, this counter may use more memory
+and have a slower Load operation.
+
+However, its Add operations scales better under high load and contention.
+To balance scalability and memory overhead, you can adjust the level of striping
+by using the NewCounterWithWideness function and specifying your desired wideness.
+
+NOTE: zero value of Counter is NOT valid, please create new counters using methods provided below.
+
+### Example:
+
+```go
+counter := thp.NewCounter()
+incsPerGoroutine := 1_000_000
+wg := &sync.WaitGroup{}
+wg.Add(runtime.NumCPU())
+for i := 0; i < runtime.NumCPU(); i++ {
+    go func() {
+        defer wg.Done()
+        for j := 0; j < incsPerGoroutine; j++ {
+            counter.Add(1)
+        }
+    }()
+}
+wg.Wait()
+expectedResult := int64(runtime.NumCPU() * incsPerGoroutine)
+if counter.Load() != expectedResult {
+    t.Errorf("result is not as expected: %v != %v", counter.Load(), expectedResult)
+}
+```
+
+### Performance
+
+Run `make cntbench` to get results on your machine.

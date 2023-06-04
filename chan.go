@@ -433,10 +433,6 @@ func (c *Consumer[T]) PollCtx(ctx context.Context) (T, bool, error) {
 	return item, true, nil
 }
 
-func zero[T any]() T {
-	return *new(T)
-}
-
 type chanError string
 
 func (e chanError) Error() string {

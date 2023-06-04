@@ -58,7 +58,7 @@ func thpCnt2(b *testing.B, goroutines int) {
 }
 
 func thpCnt(b *testing.B, goroutines int) {
-	counter := thp.NewCounter()
+	counter := thp.NewCounter(goroutines)
 
 	canRun := &sync.WaitGroup{}
 	canRun.Add(1)

@@ -3,28 +3,25 @@ package thp
 import (
 	"github.com/storozhukBM/thp/internal/goid"
 	"runtime"
+	"sync/atomic"
 )
 
+type wideInt2 struct {
+	_ [cacheLineSize - 8]byte
+	v atomic.Int64
+}
+
 type Counter2 struct {
-	stripedValues []wideInt
+	stripedValues []wideInt2
 }
 
 func NewCounter2(wideness int) *Counter2 {
 	if wideness > runtime.NumCPU() || wideness <= 0 {
 		wideness = runtime.NumCPU()
 	}
-	// compute the next highest power of 2 of 32-bit v
-	n := int32(wideness)
-	n--
-	n |= n >> 1
-	n |= n >> 2
-	n |= n >> 4
-	n |= n >> 8
-	n |= n >> 16
-	n++
-
+	n := nextHighestPowerOf2(int32(wideness))
 	return &Counter2{
-		stripedValues: make([]wideInt, n),
+		stripedValues: make([]wideInt2, n),
 	}
 }
 
@@ -37,7 +34,7 @@ func (c *Counter2) Add(x int64) {
 
 func (c *Counter2) Load() int64 {
 	result := int64(0)
-	for i, _ := range c.stripedValues {
+	for i := range c.stripedValues {
 		result += c.stripedValues[i].v.Load()
 	}
 	return result

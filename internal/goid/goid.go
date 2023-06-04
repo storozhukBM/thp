@@ -57,6 +57,5 @@ func getGoroutineIdOffsetInRuntimeGStruct() uintptr {
 // ID returns current goroutine's runtime ID
 func ID() uint64 {
 	gp := getg()
-	// fmt.Printf("%v\n", uintptr(gp))
 	return *(*uint64)(unsafe.Pointer(uintptr(gp) + _goIDOffset))
 }

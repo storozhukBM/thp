@@ -1,12 +1,8 @@
 package thp
 
-import (
-	"math/rand"
-	"sync"
-	"time"
-)
+const cacheLineSize = 64
 
-type cacheLinePadding [64]byte
+type cacheLinePadding [cacheLineSize]byte
 
 func zero[T any]() T {
 	return *new(T)
@@ -16,30 +12,14 @@ func ptr[T any](v T) *T {
 	return &v
 }
 
-type pid *int32
-
-var _processId = sync.Pool{New: func() any {
-	rnd := getRandom()
-	defer putRandom(rnd)
-	return pid(ptr(rnd.Int31()))
-}}
-
-func getProcessId() pid {
-	return _processId.Get().(pid)
-}
-
-func putProcessId(id pid) {
-	_processId.Put(id)
-}
-
-var _counterRandoms = sync.Pool{New: func() any {
-	return rand.New(rand.NewSource(time.Now().UnixNano()))
-}}
-
-func getRandom() *rand.Rand {
-	return _counterRandoms.Get().(*rand.Rand)
-}
-
-func putRandom(rnd *rand.Rand) {
-	_counterRandoms.Put(rnd)
+func nextHighestPowerOf2(wideness int32) int32 {
+	n := wideness
+	n--
+	n |= n >> 1
+	n |= n >> 2
+	n |= n >> 4
+	n |= n >> 8
+	n |= n >> 16
+	n++
+	return n
 }

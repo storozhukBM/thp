@@ -34,6 +34,7 @@ const ErrChanBatchSize chanError = "Batch size for thp.Chan can't be lower than 
 // unnecessary allocations. This optimization improves performance by reducing
 // memory allocations during batch creation and disposal.
 type Chan[T any] struct {
+	_ noCopy
 	// the number of items to accumulate in the buffer
 	// before triggering a flush operation to the internal channel.
 	batchSize int
@@ -102,6 +103,7 @@ func (ch *Chan[T]) putBatchToPool(batch *batch[T]) {
 // Each producer should be exclusively used by a single goroutine to ensure thread safety.
 // Create separate Producer instance for every goroutine that sends messages.
 type Producer[T any] struct {
+	_      noCopy
 	parent *Chan[T]
 	batch  *batch[T]
 	// We unpack the batch.buf into a separate field to avoid extra memory hop
@@ -265,6 +267,7 @@ func (p *Producer[T]) PutCtx(ctx context.Context, v T) error {
 // When the consumer's context is canceled, it stops fetching new batches from the
 // internal channel and signals the end of consumption.
 type Consumer[T any] struct {
+	_      noCopy
 	parent *Chan[T]
 	idx    int
 	batch  *batch[T]

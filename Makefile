@@ -58,3 +58,10 @@ cntbench: ## Run counter benchmarks and show benchart
 	$(benchstat) -csv cnt_stat.txt > cnt_stat.csv
 	$(benchart) 'CounterThroughput;xAxisType=log' cnt_stat.csv cnt_stat.html
 	open cnt_stat.html
+
+mapbench: ## Run map benchmarks and show benchart
+	go test -timeout 3h -count=5 -run=xxx -bench=BenchmarkMap* ./... | tee map_stat.txt
+	$(benchstat) map_stat.txt
+	$(benchstat) -csv map_stat.txt > map_stat.csv
+	$(benchart) map_stat.csv map_stat.html
+	open map_stat.html

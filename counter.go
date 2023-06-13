@@ -12,6 +12,7 @@ import (
 // This padding helps prevent false sharing, which can occur when
 // multiple CPU cores access nearby memory locations simultaneously.
 type wideInt64 struct {
+	_ noCopy
 	_ [cacheLineSize - 8]byte
 	v atomic.Int64
 }
@@ -27,6 +28,7 @@ type wideInt64 struct {
 //
 // NOTE: zero value of Counter is NOT valid, please create new counters using methods provided below.
 type Counter struct {
+	_             noCopy
 	stripedValues []wideInt64
 }
 
@@ -42,6 +44,7 @@ func NewCounterWithWideness(wideness int) *Counter {
 		wideness = runtime.NumCPU()
 	}
 	n := nextHighestPowerOf2(int32(wideness))
+	//nolint:exhaustruct // we skip explicit init of _ fields
 	return &Counter{
 		stripedValues: make([]wideInt64, n),
 	}

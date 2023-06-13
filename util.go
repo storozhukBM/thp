@@ -2,6 +2,13 @@ package thp
 
 const cacheLineSize = 64
 
+// noCopy implements sync.Locker so that go vet can trigger
+// warnings when types embedding noCopy are copied.
+type noCopy struct{}
+
+func (c *noCopy) Lock()   {}
+func (c *noCopy) Unlock() {}
+
 func zero[T any]() T {
 	return *new(T)
 }

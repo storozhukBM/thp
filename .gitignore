@@ -2,3 +2,4 @@
 .idea
 *.out
 *_stat*
+dump.go

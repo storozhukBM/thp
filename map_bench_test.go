@@ -2,6 +2,7 @@ package thp
 
 import (
 	"fmt"
+	"github.com/storozhukBM/thp/hamt3"
 	"hash/maphash"
 	"math"
 	"math/rand"
@@ -28,7 +29,13 @@ func runBenchForOperation(b *testing.B) {
 		//512,
 		100_000,
 	}
-	mutators := []int{1, 2, 4, 6, 7}
+	mutators := []int{
+		1,
+		2,
+		4,
+		6,
+		7,
+	}
 	implementations := []struct {
 		name        string
 		constructor func() maplike[string, int]
@@ -40,15 +47,15 @@ func runBenchForOperation(b *testing.B) {
 			},
 		},
 		{
-			name: "StripedRWMap",
-			constructor: func() maplike[string, int] {
-				return newStripedRWMap[string, int]()
-			},
-		},
-		{
 			name: "SyncMap",
 			constructor: func() maplike[string, int] {
 				return newSyncMap[string, int]()
+			},
+		},
+		{
+			name: "StripedCtrie",
+			constructor: func() maplike[string, int] {
+				return newStripedCtrieMap[string, int]()
 			},
 		},
 	}
@@ -201,6 +208,102 @@ func benchmapStoreStr(b *testing.B, target maplike[string, int], size int, mutat
 	if almostNever {
 		fmt.Printf("Blackhole:%v\n", readersBlackHole.Load())
 	}
+}
+
+type singleCtrieStripe[K comparable, V any] struct {
+	_ [cacheLineSize - 8]byte
+	m *atomic.Pointer[hamt3.Map[K, V]]
+}
+
+type stripedCtrieMap[K comparable, V any] struct {
+	keyIsString bool
+	keyTypeSize int
+	seed        maphash.Seed
+	stripe      []singleCtrieStripe[K, V]
+}
+
+func (s *stripedCtrieMap[K, V]) Put(key K, value V) {
+	hash := s.hash(key)
+	idx := (len(s.stripe) - 1) & int(hash)
+	individualStripe := s.stripe[idx]
+
+	for {
+		old := individualStripe.m.Load()
+		if individualStripe.m.CompareAndSwap(old, old.Store(key, value)) {
+			return
+		}
+	}
+}
+
+func (s *stripedCtrieMap[K, V]) Get(key K) (V, bool) {
+	hash := s.hash(key)
+	idx := (len(s.stripe) - 1) & int(hash)
+	individualStripe := s.stripe[idx]
+	v, ok := individualStripe.m.Load().Load(key)
+	return v, ok
+}
+
+func (s *stripedCtrieMap[K, V]) hash(key K) uint64 {
+	var strKey string
+	if s.keyIsString {
+		strKey = *(*string)(unsafe.Pointer(&key))
+	} else {
+		strKey = *(*string)(unsafe.Pointer(&struct {
+			data unsafe.Pointer
+			len  int
+		}{unsafe.Pointer(&key), s.keyTypeSize}))
+	}
+	// Now for the actual hashing.
+	return maphash.String(s.seed, strKey)
+}
+
+func newStripedCtrieMap[K comparable, V any]() *stripedCtrieMap[K, V] {
+	numStripes := int(nextHighestPowerOf2(int32(runtime.NumCPU())))
+	stripe := make([]singleCtrieStripe[K, V], numStripes)
+	for i := 0; i < numStripes; i++ {
+		s := singleCtrieStripe[K, V]{
+			m: &atomic.Pointer[hamt3.Map[K, V]]{},
+		}
+		s.m.Store(hamt3.NewMap[K, V]())
+		stripe[i] = s
+	}
+	result := &stripedCtrieMap[K, V]{
+		seed:   maphash.MakeSeed(),
+		stripe: stripe,
+	}
+
+	var k K
+	switch ((interface{})(k)).(type) {
+	case string:
+		result.keyIsString = true
+	default:
+		result.keyTypeSize = int(unsafe.Sizeof(k))
+	}
+	return result
+}
+
+type cTrie[K comparable, V any] struct {
+	p atomic.Pointer[hamt3.Map[K, V]]
+}
+
+func (c *cTrie[K, V]) Put(key K, value V) {
+	for {
+		hamt := c.p.Load()
+		newHamt := hamt.Store(key, value)
+		if c.p.CompareAndSwap(hamt, newHamt) {
+			return
+		}
+	}
+}
+
+func (c *cTrie[K, V]) Get(key K) (V, bool) {
+	return c.p.Load().Load(key)
+}
+
+func newCTrie[K comparable, V any]() *cTrie[K, V] {
+	c := &cTrie[K, V]{}
+	c.p.Store(hamt3.NewMap[K, V]())
+	return c
 }
 
 type syncMap[K comparable, V any] struct {

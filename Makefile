@@ -44,6 +44,9 @@ cntprofile: clean ## Get counter CPU profile
 	go test -run=xxx -bench=BenchmarkCounterThroughput -cpuprofile profile.out
 	go tool pprof -http=:8080 profile.out
 
+mapmemprofile: clean ## Get counter CPU profile
+	go test -run=xxx -bench=BenchmarkMap* -memprofile profile.out
+	go tool pprof -http=:8080 profile.out
 
 chanbench: ## Run channel benchmarks and show benchart
 	go test -timeout 3h -count=5 -run=xxx -bench=BenchmarkChanThroughput ./... | tee chan_stat.txt
